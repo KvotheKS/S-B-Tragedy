@@ -19,13 +19,15 @@ bool is_any(std::vector<T>& rng, T cmp_val, std::function<bool(T,T)> cmp_fnc)
 
 //sep are the tokens like ' ', which separate tokens but arent tokens themselves.
 //spec are the tokens like ':' which separete 2 tokens, and are tokens themselves. They are appended into whatever token was being written before. Ex: "label:"
-std::vector<std::string> tokenize(
+void tokenize(
+        std::vector<std::vector<std::string>>& tkns,
         std::string input, 
         std::vector<char>& sep, 
         std::vector<char>& spec
     )
 {
-    std::vector<std::string> tokens;
+    tkns.push_back(std::vector<std::string>());
+    std::vector<std::string>& tokens = tkns[tkns.size()-1];
     bool new_token = true;
     int lToken = 0;
     
@@ -60,7 +62,7 @@ std::vector<std::string> tokenize(
     }
 
     if(!new_token) tokens.push_back(input.substr(lToken, input.size()-lToken));
-    return tokens;
+    // return tokens;
 }
 
 void upper_case(std::vector<std::vector<std::string>>& tokens)
@@ -98,3 +100,6 @@ bool label_valid(std::string& label)
 
 bool var_valid(std::string& label)
 { return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*")); }
+
+bool macro_arg(std::string& label)
+{ return std::regex_search(label, std::regex("&[A-Z_]+[A-Z0-9_][,]?")); }
