@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -55,7 +56,9 @@ std::vector<std::string> tokenize(
             new_token = false;
             lToken = i;
         }
+        // std::cout << i << '\n';
     }
+
     if(!new_token) tokens.push_back(input.substr(lToken, input.size()-lToken));
     return tokens;
 }
@@ -69,7 +72,7 @@ void upper_case(std::vector<std::vector<std::string>>& tokens)
 }
 
 std::string LineLabel(int i)
-{ return "Line (" + std::to_string(i) + ") : "; }
+{ return "Line (" + std::to_string(i+1) + ") : "; }
 
 bool to_num(std::string& number)
 {
@@ -91,4 +94,7 @@ bool to_num(std::string& number)
 }
 
 bool label_valid(std::string& label)
-{ return std::regex_search(label, std::regex("[A-Z]+[A-Z0-9]*:")); }
+{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*:")); }
+
+bool var_valid(std::string& label)
+{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*")); }

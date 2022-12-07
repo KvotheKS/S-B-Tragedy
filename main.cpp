@@ -1,4 +1,5 @@
 #include "./aux_string.h"
+#include "./global_vars.h"
 #include <cstdio>
 
 std::vector<char> sep({' '}), spec({':'});
@@ -7,11 +8,14 @@ void read_asm(std::vector<std::vector<std::string>>& tokens, const char* file)
 {
     std::string line;
     std::ifstream fd(file);
-
-    while(!std::getline(fd, line).eof())
+    bool eof = false;
+    
+    int i = 0;
+    for(eof = std::getline(fd, line).eof();;eof = std::getline(fd, line).eof(), i++)
     {
         auto tokenized = tokenize(line, sep, spec);
-        tokens.push_back(tokenized);    
+        tokens.push_back(tokenized);
+        if(eof) break;
     }    
 }
 
@@ -20,10 +24,9 @@ enum label_type
     SPACE, CONST, EQU, INST, ERROR
 };
 
-void pre_proccess(std::vector<std::vector<std::string>& tokens)
+void pre_proccess(std::vector<std::vector<std::string>>& tokens)
 {
     std::map<std::string, std::string> equ;
-    std::vector<int> deletable;
     std::string err;
     bool sec_text = false;
     
@@ -41,9 +44,15 @@ void pre_proccess(std::vector<std::vector<std::string>& tokens)
 
             if(line.size() <= 1) continue;
 
-            if(line.size() == 2 && line[1] == "IF")
+            if(line[1] == "EQU")
             {
-                if((it = equ.find(line[2])) == equ.end())
+                err += LineLabel(i) + "EQU directive can't be declared after SECTION TEXT (semantic error)\n";
+                continue;
+            }
+            
+            if(line.size() == 2 && line[0] == "IF")
+            {
+                if((it = equ.find(line[1])) == equ.end()) // IF INEXISTENT_FLAG
                 {
                     err += LineLabel(i) + "FLAG not found (semantic error)\n";
                     continue;
@@ -59,51 +68,60 @@ void pre_proccess(std::vector<std::vector<std::string>& tokens)
                             break;
                     }
 
-                    if(j == tokens.size())
-                    {
-                        err += LineLabel(i) + "IF directive has to be followed by an instruction (semantic error)\n";
-                        continue;
-                    }
-
-                    if(flg != 0)
+                    // if(j == tokens.size()) // IF FLAG \ eof
+                    // {
+                    //     err += LineLabel(i) + "IF directive has to be followed by an instruction (semantic error)\n";
+                    //     continue;
+                    // }
+                    
+                    if(flg == 0)
                         tokens[j].clear();
 
                     tokens[i].clear();
                 }
             }
 
-            if(line.size() == 3 && (line[1] == "SPACE" || line[1] == "CONST"))
+            if(line.size() >= 3 && (line[1] == "SPACE" || line[1] == "CONST"))
             {
+                // std::cout << "WE IN " << line[0] << std::endl;
                 auto it = equ.find(line[2]);
                 
                 if(it != equ.end())
-                    line[1] = it->second;
+                    line[2] = it->second;
             }
-
+            
             continue;
         }
 
-        if(line.size() == 1)
-        {
-            err += LineLabel(i) + "Unexpected number of tokens in line. Expected 3 (syntatic error)\n";
-            continue;
-        }
+        // if(line.size() <= 1)
+        // {
+        //     err += LineLabel(i) + "Unexpected number of tokens in line. Expected 3 (syntatic error)\n";
+        //     continue;
+        // }
 
-        if(line[0] == "SECAO" && line[1] == "TEXTO") sec_text = true;
+        if(line.size() == 2 && line[0] == "SECTION" && line[1] == "TEXT") sec_text = true;
         
-        else if(line[0][line[0].size()-1] == ':')
+        else if(line.size() >= 2 && line[0][line[0].size()-1] == ':')
         {
             if(line[1] == "EQU")
             {
                 if(!label_valid(line[0]))
                 {
-                    err += LineLabel(i) + "EQU label has to follow the following regex: ([A-Z]+[A-Z0-9]*:). (lexical error)\n";
+                    err += LineLabel(i) + "EQU label has to follow the following regex: ([A-Z_]+[A-Z0-9_]*:). (lexical error)\n";
+                    continue;
+                }
+
+                std::string lbl_name = line[0].substr(0,line[0].size()-1);
+                
+                if(reserved.find(lbl_name) != reserved.end())
+                {
+                    err += LineLabel(i) + "Label can't use reserved token (lexical error)\n";
                     continue;
                 }
 
                 if(line.size() != 3)
                 {    
-                    err += LineLabel(i) + "Unexpected number of tokens in line. Expected 3 (syntatic error)\n";
+                    err += LineLabel(i) + "Wrong number of tokens in line. Expected 3 (syntatic error)\n";
                     continue;
                 }
 
@@ -120,32 +138,40 @@ void pre_proccess(std::vector<std::vector<std::string>& tokens)
                     err += LineLabel(i) + "EQU label already defined (semantic error)\n";
                     continue;
                 }
-                deletable.push_back(i);
-                equ.insert({line[0].substr(0,line[0].size()-1), std::to_string((short int)std::stoi(line[2]))});
+                equ.insert({lbl_name, std::to_string((short int)std::stoi(line[2]))});
+                tokens[i].clear();
             }    
         }
     }
-
-    if(err)
+    // for(auto& it : equ)
+    //     std::cout << it.first << ' ' << it.second << std::endl;
+    if(err.size())
     {
         std::cout << "Pre-Processing dropped due to errors:\n\n" << err << std::endl;
         exit(EXIT_FAILURE);
     }
+}
 
-    for(auto i : deletable)
-        tokens[i].clear();
+void pre_proccess_file(std::vector<std::vector<std::string>>& tokens)
+{
+    std::ofstream fout("./bin.PRE");
+
+    for(auto& line : tokens)
+    {
+        if(line.empty()) continue;
+
+        for(auto& token : line)
+            fout << token << ' ';
+        fout << '\n';
+    }
 }
 
 int main()
 {
-    
     std::vector<std::vector<std::string>> tokens;
+    
     read_asm(tokens, "./bin.asm");
     upper_case(tokens);
-    for(auto& line : tokens)
-    {
-        for(auto& token : line)
-            std::cout << token << ' ';
-        std::cout << std::endl;
-    }
+    pre_proccess(tokens);
+    pre_proccess_file(tokens);
 }
