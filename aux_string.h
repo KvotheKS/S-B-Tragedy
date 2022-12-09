@@ -102,4 +102,7 @@ bool var_valid(std::string& label)
 { return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*")); }
 
 bool macro_arg(std::string& label)
-{ return std::regex_search(label, std::regex("&[A-Z_]+[A-Z0-9_][,]?")); }
+{ return std::regex_search(label, std::regex("&[A-Z_]+[A-Z0-9_]*[,]?")); }
+
+bool call_arg(std::string& label)
+{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*[,]?")); }

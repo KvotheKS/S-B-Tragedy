@@ -1,6 +1,7 @@
 #include "./aux_string.h"
 #include "./global_vars.h"
 #include <cstdio>
+#include <iterator>
 
 std::vector<char> sep({' '}), spec({':'});
 
@@ -28,8 +29,8 @@ struct macro_info
 {
     int l, r; // l eh o indice onde o nome da macro foi definida e r onde ENDMACRO foi definido
     std::vector<std::string> mapped;
-    std::map<int, std::vector<std::string>> tokens
-}
+    std::map<int, std::vector<std::string>> tokens;
+};
 
 void pre_proccess(std::vector<std::vector<std::string>>& tokens)
 {
@@ -167,6 +168,7 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
     std::string err;
     bool sec_text = false, decl = false, sec_data = false;
     int i = -1;
+    std::map<std::string, macro_info>::iterator curr;
     for(auto& line : tokens)
     {
         i++;
@@ -177,6 +179,11 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
                 sec_text = true;
             else if(line[1] == "DATA")
                 sec_data = true;
+        }
+        if(line[0] == "MACRO")
+        {
+            err += "MACRO has to be named with a label (syntatic error)\n";
+            continue;
         }
         if(line.size() >= 2)
         {
@@ -210,20 +217,19 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
                 }
 
                 decl = true;
-                it = macros.insert({tmp_lbl, {i, -1, {}, {}}});
+                it = macros.insert({tmp_lbl, {i, -1, std::vector<std::string>(), std::map<int,std::vector<std::string>>()}}).first;
+                curr = it;
                 bool inval_arg = false;
                 for(int z = 2; z < line.size(); z++)
                 {
                     if(line[z] == ",") continue;
-
                     if(!macro_arg(line[z]))
                     {inval_arg = true; break;}
-
-                    it->mapped.push_back(line[z].substr(0, line[z].size() - (line[z][line.size()-1] == ','))); // Se a gente recebe &arg, devemos retirar ','. 
+                    it->second.mapped.push_back(line[z].substr(0, line[z].size() - (line[z][line[z].size()-1] == ','))); // Se a gente recebe &arg, devemos retirar ','. 
                 }
                 if(inval_arg)
                 {
-                    err += LineLabel(i) + "Invalid argument format in MACRO declaration (lexical error)\n";
+                    err += LineLabel(i) + "Invalid argument format in MACRO declaration (syntatic error)\n";
                     continue;
                 }
             }
@@ -235,23 +241,62 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
                 err += LineLabel(i) + "Unexpected ENDMACRO label has been found (semantic error)\n";
                 continue;
             }
-            macros[macros.size()-1].r = i;
+            curr->second.r = i;
             decl=false;
         }
-        if((auto it = macros.find(line[0])) != macros.end())
+        int l = 0;
+        auto it = macros.end();
+        bool inval_arg = false;
+        if((it = macros.find(line[0])) != macros.end() || ((line.size()>=2) && (l=1) && (it = macros.find(line[1])) != macros.end()))
         {
-            if(it->r == -1)
+            if(it->second.r == -1)
             {
                 err += LineLabel(i) + "Can't call a macro inside itself (semantic error)\n";
                 continue;
             }
+            // for(auto& tkn : line)
+            //     std::cout << tkn << ' ';
+            // std::cout << std::endl;
+            // std::cout << i << std::endl;
+            auto jt = it->second.tokens.insert({i, {}}).first;
+
+            for(int z = l + 1; z < line.size(); z++)
+            {
+                if(line[z] == ",") continue;
+
+                if(!call_arg(line[z]))
+                {inval_arg = true; break;}
+
+                jt->second.push_back(line[z].substr(0, line[z].size() - (line[z][line[z].size()-1] == ',')));
+            }
+            if(inval_arg)
+            {
+                err += LineLabel(i) + "Invalid argument format in MACRO call (syntatic error)\n";
+                continue;
+            }
+            if(jt->second.size() != it->second.mapped.size())
+            {
+                err += LineLabel(i) + "Invalid argument number for MACRO, got " + std::to_string(jt->second.size()) + " expected " + std::to_string(it->second.mapped.size()) + " (semantic error)\n";
+                continue;
+            }
+            line.erase(line.begin() + l, line.end());
         }
+    }
+    if(!sec_text)
+        err += "SECTION TEXT not declared (semantic error)\n";
+    if(decl)
+        err += "Missing ENDMACRO for MACRO at " + LineLabel(std::prev(macros.end())->second.l) + "(semantic error)\n";
+
+    if(err.size())
+    {
+        std::cout << "Macro Processing dropped due to errors:\n\n" << err << std::endl;
+        exit(EXIT_FAILURE);
     }
 }
 
-void pre_proccess_file(std::vector<std::vector<std::string>>& tokens)
+void pre_proccess_file(std::vector<std::vector<std::string>>& tokens, std::string ftype = ".PRE")
 {
-    std::ofstream fout("./bin.PRE");
+    std::ofstream fout(std::string("./bin") + ftype);
 
     for(auto& line : tokens)
     {
@@ -260,6 +305,116 @@ void pre_proccess_file(std::vector<std::vector<std::string>>& tokens)
         for(auto& token : line)
             fout << token << ' ';
         fout << '\n';
+    }
+    fout.close();
+}
+
+void push_macro_tokens(
+    macro_info& mc_info,
+    int tk_info_idx,
+    std::vector<std::vector<std::string>>& mcr_tokens, 
+    std::vector<std::vector<std::string>>& rcv,
+    int init_pos = -1
+    )
+{
+    if(mcr_tokens.empty()) return;
+    
+    std::vector<std::string>& tk_info = mc_info.tokens[tk_info_idx];
+    
+    std::vector<std::vector<std::string>> tmp_test;
+    for(auto& line : mcr_tokens)
+    {
+        if(line.empty()) continue;
+        
+        tmp_test.push_back({});
+        
+        std::vector<std::string>& rcv_temp = *(tmp_test.end()-1);
+        
+        for(auto token : line)
+        {
+            int j = 0;
+            
+            for(auto& jt : mc_info.mapped)
+            {
+                int pos = -1; 
+                
+                while((pos = token.find(jt, pos+1)) != std::string::npos)
+                    token.replace(pos, jt.size(), tk_info[j]);
+
+                j++;
+            }
+            rcv_temp.push_back(token);
+        }
+    }
+    rcv.insert(rcv.begin() + init_pos + 1, tmp_test.begin(), tmp_test.end());
+}
+
+void macro_unpack(
+    std::vector<std::vector<std::string>>& tokens, 
+    std::map<std::string, macro_info>& macros,
+    std::map<std::string, std::vector<std::vector<std::string>>>& macro_unpk,
+    std::map<int, std::map<std::string, macro_info>::iterator>& calls
+    )
+{
+    std::map<int, std::map<std::string, macro_info>::iterator> places;
+    for(auto it = macros.begin(); it != macros.end(); it++)
+    {;
+        places.insert({it->second.l, it});
+        for(auto& jt : it->second.tokens)
+            calls.insert({jt.first, it});
+    }
+     // std::cout << "CALLS SIZE: " << calls.size() << std::endl;
+
+    for(auto it = places.begin(), jt = calls.begin(); it!=places.end(); it++)
+    {
+        auto zt = macro_unpk.insert({it->second->first, {}}).first;
+        
+        tokens[it->second->second.l].clear();
+
+        std::cout << it->first << ' ' << it->second->first << std::endl;
+   
+        for(int i = it->second->second.l+1; i < it->second->second.r; i++)
+        {
+            if(jt != calls.end() && jt->first == i)
+                push_macro_tokens(jt->second->second, i, macro_unpk[jt->second->first], zt->second);
+            else
+            {
+                zt->second.push_back(tokens[i]);
+                tokens[i].clear(); 
+            }
+            if(jt != calls.end() && jt->first <= i)
+            {
+                std::cout << i << std::endl;
+                jt = calls.erase(jt);
+            }
+        }
+        std::cout << it->second->second.r << std::endl;
+        tokens[it->second->second.r].clear();
+        // std::cout << "OUST";
+    }
+}
+
+void macro_process_tokens(std::vector<std::vector<std::string>>& tokens, std::map<std::string, macro_info>& macros)
+{
+    std::map<std::string, std::vector<std::vector<std::string>>> macro_unpk;
+    std::map<int, std::map<std::string, macro_info>::iterator> calls;
+    macro_unpack(tokens, macros, macro_unpk, calls);
+    // for(auto& it : macro_unpk)
+    //     for(auto& line : it.second)
+    //     {
+    //         for(auto& token : line)
+    //             std::cout << token << ' ';
+    //         std::cout << '\n';
+    //     }
+    for(auto it = calls.begin(); it != calls.end();it++)
+        push_macro_tokens(it->second->second, it->first, macro_unpk[it->second->first], tokens, it->first);
+    
+
+    for(auto& line : tokens)
+    {
+        for(auto& token : line)
+            std::cout << token << ' ';
+        std::cout << '\n';
     }
 }
 
@@ -272,4 +427,7 @@ int main()
     upper_case(tokens);
     pre_proccess(tokens);
     pre_proccess_file(tokens);
+    macro_processing(tokens, macros);
+    macro_process_tokens(tokens, macros);
+    pre_proccess_file(tokens, ".MCR");
 }
