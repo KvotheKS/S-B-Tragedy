@@ -106,3 +106,32 @@ bool macro_arg(std::string& label)
 
 bool call_arg(std::string& label)
 { return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*[,]?")); }
+
+std::pair<int, bool> get_num(std::string& tkn)
+{
+    if(line.size() == 1 || line[1] != 'X')
+    {
+        try
+        {
+            int tnt = std::stoi(tkn);
+            return {tnt, true};
+        }
+        catch(...)
+        {
+            return {0,false};
+        }
+    }
+    else
+    {
+        try
+        {
+            int tnt = std::stoi(tkn,nullptr, 16);
+            return {tnt, true};
+        }
+        catch(...)
+        {
+            return {0,false};
+        }
+    }
+    return {0, false};
+}

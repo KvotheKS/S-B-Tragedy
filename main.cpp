@@ -15,7 +15,6 @@ void read_asm(std::vector<std::vector<std::string>>& tokens, const char* file)
     for(eof = std::getline(fd, line).eof();;eof = std::getline(fd, line).eof(), i++)
     {
         tokenize(tokens, line, sep, spec);
-        // tokens.push_back(tokenized);
         if(eof) break;
     }    
 }
@@ -294,6 +293,190 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
     }
 }
 
+bool push_arg(std::string& err, std::vector<std::string> vstr, int tkline)
+{
+    if(vstr.size() == 1)
+    {
+        auto it = label_table.find(vstr[0]);
+        if(it == label_table.end())
+        {
+            label_table.insert({vstr[0], {-1, {exec_lines.size()-1}, {exec_lines[exec_lines.size()-1].size()}}});
+            exec_lines[exec_lines.size()-1].push_back(0);
+        }
+        else
+            exec_lines[exec_lines.size()-1].push_back(it->second.end);
+        return true;
+    }
+    else if(vstr.size() == 3)
+    {
+        if(vstr[1] != '+')
+        {
+            err += LineLabel(tkline) + "Token + expected (syntatic error)\n";
+            return false;
+        }
+        auto [t_num, b_flag] = get_num(vstr[2]);
+        if(!b_flag)
+        {
+            err += LineLabel(tkline) + "Expected valid number (lexical error)\n";
+            return false;
+        }
+        
+        auto it = label_table.find(vstr[0]);
+        
+        if(it == label_table.end())
+        {
+            label_table.insert({vstr[0], {-1, {exec_lines.size()-1}, {exec_lines[exec_lines.size()-1].size()}}});
+            exec_lines[exec_lines.size()-1].push_back(t_num);
+        }
+        else
+            exec_lines[exec_lines.size()-1].push_back(it->second.end + t_num);
+        
+        return true;
+    }
+    err += LineLabel(tkline) + "Unexpected number of tokens (syntatic error)\n";
+    return false;
+}
+
+bool push_label(std::string& lbl, int end)
+{
+    if(lbl[lbl.size()-1]==':')
+        lbl.resize(lbl.size()-1);
+    auto it = label_table.find(lbl);
+    if(it != label_table.end())
+    {
+        if(it->second.dep_l.size() == 0)
+            return false;
+        
+        it->second.end = end;
+        for(int i = 0; i < it->second.dep_l.size(); i++)
+            exec_lines[it->second.dep_l[i]][it->second.dep_arg[i]] += end; 
+        it->second.dep_l.clear(); it->second.dep_arg.clear();
+    }
+    else
+        label_table.insert({lbl, {end, {},{}}});
+    return true;
+}
+
+void obj_procces(std::vector<std::vector<std::string>>& tokens)
+{
+    std::vector<std::string> labels;
+    std::string err;
+    bool sec_text = false;
+    bool sec_data = false;
+    
+    int i = -1;
+    int j = -1; 
+    int curr_address = 0;
+    for(auto& line : tokens)
+    {
+        i++;
+        if(line.empty()) continue;
+        if(line.size() > 3)
+        {
+            err += LineLabel(i) + "Too many tokens in line (syntatic error)";
+            continue;
+        }
+        if(sec_data)
+        {
+            if(line.size() < 2 || line.size() > 3)
+            {
+                err += LineLabel(i) + "After SECTION DATA every line has at least 2 and at most 3 tokens (syntatic error)";
+                continue;
+            }
+            if(!label_valid(line[0]))
+            {
+                err += LineLabel(i) + "Every argument in SECTION DATA has to begin with a valid label (lexical error)\n";
+                continue;
+            }
+            if(line[1] == "SPACE") // implementar os enderecos
+            {
+                int m_end = 1;
+                if(line.size() == 3)
+                {
+                    auto [tmp_n, err_flag] = get_num(line[2]);
+                    if(!err_flag)
+                    {
+                        err += LineLabel(i) + "Argument in SPACE has to be a valid base 10|16 number(lexical error)\n";
+                        continue;
+                    }
+                    m_end = tmp_n;
+                }
+                
+                ++j;
+                exec_lines.push_back(std::vector<int>(0,m_end));
+                curr_address += m_end;
+                
+                if(!push_label(line[0], curr_address-m_end))
+                {
+                    err += LineLabel(i) + "Label " + line[0] + " was already defined (semantic error)\n";
+                    continue;
+                }
+
+            }
+            else if(line[1] == "CONST") // implementar os enderecos
+            {
+                if(line.size() == 2)
+                {
+                    err += LineLabel(i) + "CONST directive has to be followed by a number (syntatic error)\n";
+                    continue;
+                }
+                auto [tmp_n, err_flag] = get_num(line[2]);
+                
+                if(!err_flag)
+                {
+                    err += LineLabel(i) + "Argument in CONST has to be a valid base 10|16 number(lexical error)\n";
+                    continue;
+                }
+                ++j;
+                exec_lines.push_back({tmp_n});
+                curr_address++;
+                
+                if(!push_label(line[0], curr_address-1))
+                {
+                    err += LineLabel(i) + "Label " + line[0] + " was already defined (semantic error)\n";
+                    continue;
+                }
+            }
+            else
+            {
+                err += LineLabel(i) + "In SECTION DATA only SPACE and CONST are allowed(syntatic error)\n";
+                continue;
+            }
+        }
+        else if(sec_text)
+        {
+
+        }
+        else if(line.size() == 2 && line[0] == "SECTION" )
+        {
+            if(line[1] == "TEXT")
+                sec_text = true;
+            else if(line[1] == "DATA")
+            {
+                sec_data = true;
+                if(!sec_text)
+                {
+                    err += LineLabel(i) + "SECTION DATA declared before SECTION TEXT (semantic error)\n";
+                    continue;
+                }
+            }
+        }
+        else
+        {
+            err += LineLabel(i) + "Unexpected tokens (semantic error)\n";
+            continue;
+        }
+    }
+    if(!sec_text)
+        err += "SECTION TEXT not declared (semantic error)\n";
+
+    if(err.size())
+    {
+        std::cout << "Pre-Processing dropped due to errors:\n\n" << err << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
 void pre_proccess_file(std::vector<std::vector<std::string>>& tokens, std::string ftype = ".PRE")
 {
     std::ofstream fout(std::string("./bin") + ftype);
@@ -430,4 +613,5 @@ int main()
     macro_processing(tokens, macros);
     macro_process_tokens(tokens, macros);
     pre_proccess_file(tokens, ".MCR");
+    obj_procces(tokens);
 }
