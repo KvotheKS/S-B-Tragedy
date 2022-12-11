@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <iterator>
 
-std::vector<char> sep({' '}), spec({':'});
+std::vector<char> sep({' '}), spec({':'}), spec_tk({'+'});
 
 void read_asm(std::vector<std::vector<std::string>>& tokens, const char* file)
 {
@@ -14,15 +14,10 @@ void read_asm(std::vector<std::vector<std::string>>& tokens, const char* file)
     int i = 0;
     for(eof = std::getline(fd, line).eof();;eof = std::getline(fd, line).eof(), i++)
     {
-        tokenize(tokens, line, sep, spec);
+        tokenize(tokens, line, sep, spec, spec_tk);
         if(eof) break;
     }    
 }
-
-enum label_type
-{
-    SPACE, CONST, EQU, INST, ERROR
-};
 
 struct macro_info
 {
@@ -75,12 +70,6 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                             break;
                     }
 
-                    // if(j == tokens.size()) // IF FLAG \ eof
-                    // {
-                    //     err += LineLabel(i) + "IF directive has to be followed by an instruction (semantic error)\n";
-                    //     continue;
-                    // }
-                    
                     if(flg == 0)
                         tokens[j].clear();
 
@@ -90,7 +79,6 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
 
             if(line.size() >= 3 && (line[1] == "SPACE" || line[1] == "CONST"))
             {
-                // std::cout << "WE IN " << line[0] << std::endl;
                 auto it = equ.find(line[2]);
                 
                 if(it != equ.end())
@@ -99,12 +87,6 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
             
             continue;
         }
-
-        // if(line.size() <= 1)
-        // {
-        //     err += LineLabel(i) + "Unexpected number of tokens in line. Expected 3 (syntatic error)\n";
-        //     continue;
-        // }
 
         if(line.size() == 2 && line[0] == "SECTION" && line[1] == "TEXT") sec_text = true;
         
@@ -132,9 +114,9 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                     continue;
                 }
 
-                auto pnum = to_num(line[2]);
+                auto [t_num, pnum] = get_num(line[2]);
                 
-                if(pnum)
+                if(!pnum)
                 {
                     err += LineLabel(i) + "Invalid EQU token. Expected number (lexical error)\n";
                     continue;
@@ -145,7 +127,7 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "EQU label already defined (semantic error)\n";
                     continue;
                 }
-                equ.insert({lbl_name, std::to_string((short int)std::stoi(line[2]))});
+                equ.insert({lbl_name, std::to_string((short int)t_num)});
                 tokens[i].clear();
             }    
         }
@@ -153,8 +135,6 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
     if(!sec_text)
         err += "SECTION TEXT not declared (semantic error)\n";
     
-    // for(auto& it : equ)
-    //     std::cout << it.first << ' ' << it.second << std::endl;
     if(err.size())
     {
         std::cout << "Pre-Processing dropped due to errors:\n\n" << err << std::endl;
@@ -253,10 +233,7 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
                 err += LineLabel(i) + "Can't call a macro inside itself (semantic error)\n";
                 continue;
             }
-            // for(auto& tkn : line)
-            //     std::cout << tkn << ' ';
-            // std::cout << std::endl;
-            // std::cout << i << std::endl;
+      
             auto jt = it->second.tokens.insert({i, {}}).first;
 
             for(int z = l + 1; z < line.size(); z++)
@@ -300,16 +277,25 @@ bool push_arg(std::string& err, std::vector<std::string> vstr, int tkline)
         auto it = label_table.find(vstr[0]);
         if(it == label_table.end())
         {
-            label_table.insert({vstr[0], {-1, {exec_lines.size()-1}, {exec_lines[exec_lines.size()-1].size()}}});
+            label_table.insert({vstr[0], {-1, {(int)exec_lines.size()-1}, {(int)exec_lines[exec_lines.size()-1].size()}}});
             exec_lines[exec_lines.size()-1].push_back(0);
         }
+
+        else if(it->second.end == -1)
+        {
+            exec_lines[exec_lines.size()-1].push_back(0);
+            auto& lbl_tmp = label_table[vstr[0]];
+            lbl_tmp.dep_l.push_back(exec_lines.size()-1);
+            lbl_tmp.dep_arg.push_back(exec_lines[exec_lines.size()-1].size()-1);
+        }
+
         else
             exec_lines[exec_lines.size()-1].push_back(it->second.end);
         return true;
     }
     else if(vstr.size() == 3)
     {
-        if(vstr[1] != '+')
+        if(vstr[1] != "+")
         {
             err += LineLabel(tkline) + "Token + expected (syntatic error)\n";
             return false;
@@ -325,8 +311,16 @@ bool push_arg(std::string& err, std::vector<std::string> vstr, int tkline)
         
         if(it == label_table.end())
         {
-            label_table.insert({vstr[0], {-1, {exec_lines.size()-1}, {exec_lines[exec_lines.size()-1].size()}}});
+            label_table.insert({vstr[0], {-1, {(int)exec_lines.size()-1}, {(int)exec_lines[exec_lines.size()-1].size()}}});
             exec_lines[exec_lines.size()-1].push_back(t_num);
+        }
+        else if(it->second.end == -1)
+        {
+            exec_lines[exec_lines.size()-1].push_back(t_num);
+
+            auto& lbl_tmp = label_table[vstr[0]];
+            lbl_tmp.dep_l.push_back(exec_lines.size()-1);
+            lbl_tmp.dep_arg.push_back(exec_lines[exec_lines.size()-1].size()-1);
         }
         else
             exec_lines[exec_lines.size()-1].push_back(it->second.end + t_num);
@@ -341,20 +335,35 @@ bool push_label(std::string& lbl, int end)
 {
     if(lbl[lbl.size()-1]==':')
         lbl.resize(lbl.size()-1);
+
     auto it = label_table.find(lbl);
     if(it != label_table.end())
     {
-        if(it->second.dep_l.size() == 0)
+        if(it->second.end != -1)
             return false;
         
         it->second.end = end;
+
         for(int i = 0; i < it->second.dep_l.size(); i++)
             exec_lines[it->second.dep_l[i]][it->second.dep_arg[i]] += end; 
+        
         it->second.dep_l.clear(); it->second.dep_arg.clear();
     }
     else
         label_table.insert({lbl, {end, {},{}}});
     return true;
+}
+
+void check_labels(std::string& err)
+{
+    for(auto it : label_table)
+    {
+        if(it.second.end == -1)
+        {
+            err += "Label with name " + it.first + " was never defined (semantic error)\n";
+            continue;
+        }
+    }
 }
 
 void obj_procces(std::vector<std::vector<std::string>>& tokens)
@@ -371,9 +380,9 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
     {
         i++;
         if(line.empty()) continue;
-        if(line.size() > 3)
+        if(!sec_text && line.size() != 2)
         {
-            err += LineLabel(i) + "Too many tokens in line (syntatic error)";
+            err += LineLabel(i) + "Unexpected tokens in line (semantic error)";
             continue;
         }
         if(sec_data)
@@ -403,7 +412,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 }
                 
                 ++j;
-                exec_lines.push_back(std::vector<int>(0,m_end));
+                exec_lines.push_back(std::vector<int>(m_end,0));
                 curr_address += m_end;
                 
                 if(!push_label(line[0], curr_address-m_end))
@@ -439,13 +448,88 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
             }
             else
             {
-                err += LineLabel(i) + "In SECTION DATA only SPACE and CONST are allowed(syntatic error)\n";
+                err += LineLabel(i) + "In SECTION DATA only SPACE and CONST are allowed(semantic error)\n";
                 continue;
             }
         }
         else if(sec_text)
         {
+            int z = 0;
+            if(line.size() == 2 && line[0] == "SECTION" )
+            {
+                if(line[1] == "DATA")
+                    sec_data = true;
+                continue;
+            }
 
+            if(line[0][line[0].size()-1] == ':')
+            {
+                z = 1;
+                if(!label_valid(line[0]))
+                {
+                    err += LineLabel(i) + "Label has to follow the following regex: ([A-Z_]+[A-Z0-9_]*:). (lexical error)\n";
+                    continue;
+                }
+                std::string lbl_tmp = line[0].substr(0, line[0].size()-1);
+                if(reserved.find(lbl_tmp) != reserved.end())
+                {
+                    err += LineLabel(i) + "Label can't use reserved tokens (semantic error)\n";
+                    continue;
+                }
+                if(!push_label(lbl_tmp, curr_address))
+                {
+                    err += LineLabel(i) + "Label already defined (semantic error)\n";
+                    continue;
+                }
+            }
+            if(line.size() == z) continue;
+            if(instructions.find(line[z]) == instructions.end())
+            {
+                err += LineLabel(i) + " First token in line (disconsidering optiona label) has to be an instruction (syntatic error)\n";
+                continue;
+            }
+            
+            exec_lines.push_back({instructions[line[z]]});
+            
+            if(line[z] == "COPY")
+            {
+                int l = z + 1, r = -1;
+                // bool b_flag = false;
+                for(l = z + 1; line.size() > l && (r = line[l].find(',')) == std::string::npos; l++);
+                if(l == line.size() || r == line[l].size()-1)
+                {
+                    err += LineLabel(i) + line[l] + "COPY instruction has 2 arguments separated only by a comma (syntatic error)\n";
+                    continue;
+                }
+                
+                line.insert(line.begin() + l + 1, {line[l].substr(0,r), line[l].substr(r+1,line.size()-r)});
+                line.erase(line.begin() + l);
+               
+                if(!push_arg(err, std::vector<std::string>(line.begin() + z + 1, line.begin() + l + 1),i)) continue;
+                if(!push_arg(err, std::vector<std::string>(line.begin() + l + 1, line.end()),i)) continue;
+                
+                curr_address += 3;
+            }
+            else if(line[z] == "STOP")
+            {
+                if(line.size() > z + 1)
+                {
+                    err += LineLabel(i) + "STOP instruction has no arguments(syntatic error)\n";
+                    continue;
+                }
+                
+                curr_address++;
+            }
+            else
+            {
+                if(line.size() > z + 4 || line.size() == z+3 || line.size() == z+1)
+                {
+                    err += LineLabel(i) + "Unexpected number of arguments in line (syntatic error)\n";
+                    continue;
+                }
+                if(!push_arg(err, std::vector<std::string>(line.begin() + z + 1, line.end()),i)) continue;
+                curr_address += 2;
+            }
         }
         else if(line.size() == 2 && line[0] == "SECTION" )
         {
@@ -469,22 +553,35 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
     }
     if(!sec_text)
         err += "SECTION TEXT not declared (semantic error)\n";
-
+    check_labels(err);
     if(err.size())
     {
-        std::cout << "Pre-Processing dropped due to errors:\n\n" << err << std::endl;
+        std::cout << "compilation dropped due to errors:\n\n" << err << std::endl;
         exit(EXIT_FAILURE);
     }
 }
 
-void pre_proccess_file(std::vector<std::vector<std::string>>& tokens, std::string ftype = ".PRE")
+void pre_proccess_file(std::vector<std::vector<std::string>>& tokens, std::string ftype = "bin.PRE")
 {
-    std::ofstream fout(std::string("./bin") + ftype);
+    std::ofstream fout(ftype);
 
     for(auto& line : tokens)
     {
         if(line.empty()) continue;
 
+        for(auto& token : line)
+            fout << token << ' ';
+        fout << '\n';
+    }
+    fout.close();
+}
+
+void debug_file(std::vector<std::vector<std::string>>& tokens, std::string ftype = ".DBG")
+{
+    std::ofstream fout(std::string("./bin") + ftype);
+
+    for(auto& line : tokens)
+    {
         for(auto& token : line)
             fout << token << ' ';
         fout << '\n';
@@ -546,16 +643,14 @@ void macro_unpack(
         for(auto& jt : it->second.tokens)
             calls.insert({jt.first, it});
     }
-     // std::cout << "CALLS SIZE: " << calls.size() << std::endl;
-
+    
     for(auto it = places.begin(), jt = calls.begin(); it!=places.end(); it++)
     {
         auto zt = macro_unpk.insert({it->second->first, {}}).first;
         
         tokens[it->second->second.l].clear();
 
-        std::cout << it->first << ' ' << it->second->first << std::endl;
-   
+       
         for(int i = it->second->second.l+1; i < it->second->second.r; i++)
         {
             if(jt != calls.end() && jt->first == i)
@@ -567,13 +662,10 @@ void macro_unpack(
             }
             if(jt != calls.end() && jt->first <= i)
             {
-                std::cout << i << std::endl;
                 jt = calls.erase(jt);
             }
         }
-        std::cout << it->second->second.r << std::endl;
         tokens[it->second->second.r].clear();
-        // std::cout << "OUST";
     }
 }
 
@@ -581,37 +673,52 @@ void macro_process_tokens(std::vector<std::vector<std::string>>& tokens, std::ma
 {
     std::map<std::string, std::vector<std::vector<std::string>>> macro_unpk;
     std::map<int, std::map<std::string, macro_info>::iterator> calls;
+
     macro_unpack(tokens, macros, macro_unpk, calls);
-    // for(auto& it : macro_unpk)
-    //     for(auto& line : it.second)
-    //     {
-    //         for(auto& token : line)
-    //             std::cout << token << ' ';
-    //         std::cout << '\n';
-    //     }
+    
     for(auto it = calls.begin(); it != calls.end();it++)
         push_macro_tokens(it->second->second, it->first, macro_unpk[it->second->first], tokens, it->first);
-    
-
-    for(auto& line : tokens)
-    {
-        for(auto& token : line)
-            std::cout << token << ' ';
-        std::cout << '\n';
-    }
 }
 
-int main()
+void push_obj(std::string fname)
+{
+    std::ofstream fout(fname + ".OBJ");
+    for(auto& line : exec_lines)
+        for(auto& end : line)
+            fout << end << ' ';
+    fout.close();
+}
+
+int main(int argc, char **argv)
 {
     std::vector<std::vector<std::string>> tokens;
     std::map<std::string, macro_info> macros;
-
+    
+    std::string op = argv[1];
+    std::string file_n = argv[2];
+    std::string ext = get_ext(file_n);
+    
     read_asm(tokens, "./bin.asm");
     upper_case(tokens);
     pre_proccess(tokens);
-    pre_proccess_file(tokens);
+
+    if(op == "-p")
+    {
+        pre_proccess_file(tokens, file_n + ".PRE");
+        return 0;
+    }
+
     macro_processing(tokens, macros);
     macro_process_tokens(tokens, macros);
-    pre_proccess_file(tokens, ".MCR");
+    
+    if(op == "-m")
+    {
+        pre_proccess_file(tokens, file_n + ".MCR");
+        return 0;
+    }
+
     obj_procces(tokens);
+    
+    if(op == "-o")
+        push_obj(file_n);
 }

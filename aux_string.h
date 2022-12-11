@@ -23,7 +23,8 @@ void tokenize(
         std::vector<std::vector<std::string>>& tkns,
         std::string input, 
         std::vector<char>& sep, 
-        std::vector<char>& spec
+        std::vector<char>& spec,
+        std::vector<char>& spec_tk
     )
 {
     tkns.push_back(std::vector<std::string>());
@@ -32,12 +33,20 @@ void tokenize(
     int lToken = 0;
     
     auto sepcomp = std::function<bool(char,char)>([](char vec_inp, char inp) -> bool { return vec_inp == inp; });    
-
-    for(int i = 0; i < input.size(); i++)
+    int i;
+    for(i = 0; i < input.size(); i++)
     {
         if(input[i]==';')
             break;
         
+        else if(is_any(spec_tk, input[i], sepcomp))
+        {
+            if(!new_token)
+                tokens.push_back(input.substr(lToken, i - lToken));
+            tokens.push_back(input.substr(i,1));
+            new_token = true;
+        }
+
         else if(is_any(spec, input[i], sepcomp))
         {
             if(new_token) lToken=i;
@@ -61,7 +70,7 @@ void tokenize(
         // std::cout << i << '\n';
     }
 
-    if(!new_token) tokens.push_back(input.substr(lToken, input.size()-lToken));
+    if(!new_token) tokens.push_back(input.substr(lToken, i-lToken));
     // return tokens;
 }
 
@@ -109,7 +118,7 @@ bool call_arg(std::string& label)
 
 std::pair<int, bool> get_num(std::string& tkn)
 {
-    if(line.size() == 1 || line[1] != 'X')
+    if(tkn.size() == 1 || tkn[1] != 'X')
     {
         try
         {
@@ -134,4 +143,18 @@ std::pair<int, bool> get_num(std::string& tkn)
         }
     }
     return {0, false};
+}
+
+std::string get_ext(std::string& fname)
+{
+    for(int i = fname.size()-1; i >= 0; i--)
+    {
+        if(fname[i]=='.')
+        {
+            std::string ext = fname.substr(i+1, fname.size()-i-1);
+            fname.resize(i);
+            return ext;
+        }
+    }
+    return "";
 }
