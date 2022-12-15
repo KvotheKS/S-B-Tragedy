@@ -105,44 +105,25 @@ bool to_num(std::string& number)
 }
 
 bool label_valid(std::string& label)
-{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*:")); }
+{ return std::regex_match(label, std::regex("[A-Z_]+[A-Z0-9_]*:")); }
 
 bool var_valid(std::string& label)
-{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*")); }
+{ return std::regex_match(label, std::regex("[A-Z_]+[A-Z0-9_]*")); }
 
 bool macro_arg(std::string& label)
-{ return std::regex_search(label, std::regex("&[A-Z_]+[A-Z0-9_]*[,]?")); }
+{ return std::regex_match(label, std::regex("&[A-Z_]+[A-Z0-9_]*[,]?")); }
 
 bool call_arg(std::string& label)
-{ return std::regex_search(label, std::regex("[A-Z_]+[A-Z0-9_]*[,]?")); }
+{ return std::regex_match(label, std::regex("[A-Z_]+[A-Z0-9_]*[,]?")); }
 
 std::pair<int, bool> get_num(std::string& tkn)
 {
-    if(tkn.size() == 1 || tkn[1] != 'X')
-    {
-        try
-        {
-            int tnt = std::stoi(tkn);
-            return {tnt, true};
-        }
-        catch(...)
-        {
-            return {0,false};
-        }
-    }
-    else
-    {
-        try
-        {
-            int tnt = std::stoi(tkn,nullptr, 16);
-            return {tnt, true};
-        }
-        catch(...)
-        {
-            return {0,false};
-        }
-    }
-    return {0, false};
+    bool valid = std::regex_match(tkn, std::regex("([-+]?[0-9]+)|(0X[0-9]+)"));
+    if(!valid)
+        return {0,false};
+    if(tkn[1] == 'X')
+        return {std::stoi(tkn, nullptr, 16),true};
+    return {std::stoi(tkn), true};
 }
 
 std::string get_ext(std::string& fname)

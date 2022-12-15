@@ -102,11 +102,7 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
 
                 std::string lbl_name = line[0].substr(0,line[0].size()-1);
                 
-                if(reserved.find(lbl_name) != reserved.end())
-                {
-                    err += LineLabel(i) + "Label can't use reserved token (lexical error)\n";
-                    continue;
-                }
+                
 
                 if(line.size() != 3)
                 {    
@@ -189,11 +185,7 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
                     continue;
                 }
 
-                if(reserved.find(tmp_lbl) != reserved.end())
-                {
-                    err += LineLabel(i) + "Labels can't use reserved tokens (lexical error)\n";
-                    continue;
-                }
+                
 
                 decl = true;
                 it = macros.insert({tmp_lbl, {i, -1, std::vector<std::string>(), std::map<int,std::vector<std::string>>()}}).first;
@@ -471,11 +463,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     continue;
                 }
                 std::string lbl_tmp = line[0].substr(0, line[0].size()-1);
-                if(reserved.find(lbl_tmp) != reserved.end())
-                {
-                    err += LineLabel(i) + "Label can't use reserved tokens (semantic error)\n";
-                    continue;
-                }
+        
                 if(!push_label(lbl_tmp, curr_address))
                 {
                     err += LineLabel(i) + "Label already defined (semantic error)\n";
@@ -498,7 +486,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 for(l = z + 1; line.size() > l && (r = line[l].find(',')) == std::string::npos; l++);
                 if(l == line.size() || r == line[l].size()-1)
                 {
-                    err += LineLabel(i) + line[l] + "COPY instruction has 2 arguments separated only by a comma (syntatic error)\n";
+                    err += LineLabel(i) + "COPY instruction has 2 arguments separated only by a comma (syntatic error)\n";
                     continue;
                 }
                 
