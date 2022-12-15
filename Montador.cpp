@@ -361,10 +361,11 @@ void check_labels(std::string& err)
 void obj_procces(std::vector<std::vector<std::string>>& tokens)
 {
     std::vector<std::string> labels;
-    std::string err;
+    std::string err, curr_label;
     bool sec_text = false;
     bool sec_data = false;
-    
+    bool label_dcl = false;
+
     int i = -1;
     int j = -1; 
     int curr_address = 0;
@@ -379,22 +380,36 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
         }
         if(sec_data)
         {
-            if(line.size() < 2 || line.size() > 3)
+            int z = 0;
+            if(label_valid(line[0]))
             {
-                err += LineLabel(i) + "After SECTION DATA every line has at least 2 and at most 3 tokens (syntatic error)";
+                if(label_dcl)
+                {
+                    err += LineLabel(i) + "Line already has label (syntatic error)\n";
+                    label_dcl = false;
+                    continue;
+                }
+                curr_label = line[0];
+                label_dcl = true;
+                z = 1;
+            }
+            if(line.size() == 1) continue;
+            if(line.size() > 3)
+            {
+                err += LineLabel(i) + "After SECTION DATA every line has at most 3 tokens (syntatic error)";
                 continue;
             }
-            if(!label_valid(line[0]))
+            if(!label_dcl)
             {
                 err += LineLabel(i) + "Every argument in SECTION DATA has to begin with a valid label (lexical error)\n";
                 continue;
             }
-            if(line[1] == "SPACE") // implementar os enderecos
+            if(line[z] == "SPACE") // implementar os enderecos
             {
                 int m_end = 1;
                 if(line.size() == 3)
                 {
-                    auto [tmp_n, err_flag] = get_num(line[2]);
+                    auto [tmp_n, err_flag] = get_num(line[z+1]);
                     if(!err_flag)
                     {
                         err += LineLabel(i) + "Argument in SPACE has to be a valid base 10|16 number(lexical error)\n";
@@ -407,21 +422,21 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 exec_lines.push_back(std::vector<int>(m_end,0));
                 curr_address += m_end;
                 
-                if(!push_label(line[0], curr_address-m_end))
+                if(!push_label(curr_label, curr_address-m_end))
                 {
-                    err += LineLabel(i) + "Label " + line[0] + " was already defined (semantic error)\n";
+                    err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
                     continue;
                 }
 
             }
-            else if(line[1] == "CONST") // implementar os enderecos
+            else if(line[z] == "CONST") // implementar os enderecos
             {
-                if(line.size() == 2)
+                if(line.size() == 1 + z)
                 {
                     err += LineLabel(i) + "CONST directive has to be followed by a number (syntatic error)\n";
                     continue;
                 }
-                auto [tmp_n, err_flag] = get_num(line[2]);
+                auto [tmp_n, err_flag] = get_num(line[z+1]);
                 
                 if(!err_flag)
                 {
@@ -432,9 +447,9 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 exec_lines.push_back({tmp_n});
                 curr_address++;
                 
-                if(!push_label(line[0], curr_address-1))
+                if(!push_label(curr_label, curr_address-1))
                 {
-                    err += LineLabel(i) + "Label " + line[0] + " was already defined (semantic error)\n";
+                    err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
                     continue;
                 }
             }
@@ -469,6 +484,13 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "Label already defined (semantic error)\n";
                     continue;
                 }
+                if(label_dcl)
+                {
+                    err += LineLabel(i) + "Line already has label (syntatic error)\n";
+                    label_dcl=false;
+                    continue;
+                }
+                label_dcl = true;
             }
             if(line.size() == z) continue;
             if(instructions.find(line[z]) == instructions.end())
@@ -518,6 +540,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 if(!push_arg(err, std::vector<std::string>(line.begin() + z + 1, line.end()),i)) continue;
                 curr_address += 2;
             }
+            label_dcl = false;
         }
         else if(line.size() == 2 && line[0] == "SECTION" )
         {
