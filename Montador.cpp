@@ -393,7 +393,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 label_dcl = true;
                 z = 1;
             }
-            if(line.size() == 1) continue;
+            if(line.size() == z) continue;
             if(line.size() > 3)
             {
                 err += LineLabel(i) + "After SECTION DATA every line has at most 3 tokens (syntatic error)";
@@ -407,10 +407,10 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
             if(line[z] == "SPACE") // implementar os enderecos
             {
                 int m_end = 1;
-                if(line.size() == 3)
+                if(line.size() == z+2)
                 {
                     auto [tmp_n, err_flag] = get_num(line[z+1]);
-                    if(!err_flag)
+                    if(!err_flag || tmp_n <= 0)
                     {
                         err += LineLabel(i) + "Argument in SPACE has to be a valid base 10|16 number(lexical error)\n";
                         continue;
@@ -421,7 +421,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 ++j;
                 exec_lines.push_back(std::vector<int>(m_end,0));
                 curr_address += m_end;
-                
+                label_dcl = false;
                 if(!push_label(curr_label, curr_address-m_end))
                 {
                     err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
@@ -707,29 +707,34 @@ int main(int argc, char **argv)
     
     std::string op = argv[1];
     std::string file_n = argv[2];
-    std::string ext = get_ext(file_n);
-    
-    read_asm(tokens, "./bin.asm");
-    upper_case(tokens);
-    pre_proccess(tokens);
+    // std::string ext = get_ext(file_n);
+    std::string ext;
+    if(op == "-p") ext = ".ASM";
+    else if(op == "-m") ext = ".PRE";
+    else if(op == "-o") ext = ".MCR";
+    else return 0;
 
+    read_asm(tokens, (file_n + ext).c_str());
+    upper_case(tokens);
+    
     if(op == "-p")
     {
+        pre_proccess(tokens);
         pre_proccess_file(tokens, file_n + ".PRE");
         return 0;
     }
 
-    macro_processing(tokens, macros);
-    macro_process_tokens(tokens, macros);
-    
     if(op == "-m")
     {
+        macro_processing(tokens, macros);
+        macro_process_tokens(tokens, macros);
         pre_proccess_file(tokens, file_n + ".MCR");
         return 0;
     }
-
-    obj_procces(tokens);
     
     if(op == "-o")
+    {
+        obj_procces(tokens);
         push_obj(file_n);
+    }
 }
