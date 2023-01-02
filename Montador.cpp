@@ -157,7 +157,7 @@ void macro_processing(std::vector<std::vector<std::string>>& tokens, std::map<st
         }
         if(line[0] == "MACRO")
         {
-            err += "MACRO has to be named with a label (syntatic error)\n";
+            err += LineLabel(i) + "MACRO has to be named with a label (syntatic error)\n";
             continue;
         }
         if(line.size() >= 2)
@@ -511,7 +511,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "COPY instruction has 2 arguments separated only by a comma (syntatic error)\n";
                     continue;
                 }
-                
+        
                 line.insert(line.begin() + l + 1, {line[l].substr(0,r), line[l].substr(r+1,line.size()-r)});
                 line.erase(line.begin() + l);
                
@@ -535,6 +535,11 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 if(line.size() > z + 4 || line.size() == z+3 || line.size() == z+1)
                 {
                     err += LineLabel(i) + "Unexpected number of arguments in line (syntatic error)\n";
+                    continue;
+                }
+                if(!var_valid(line[z + 1]))
+                {
+                    err += LineLabel(i) + "Invalid Label Format (lexical error)\n";
                     continue;
                 }
                 if(!push_arg(err, std::vector<std::string>(line.begin() + z + 1, line.end()),i)) continue;
