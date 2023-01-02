@@ -446,7 +446,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 ++j;
                 exec_lines.push_back({tmp_n});
                 curr_address++;
-                
+                label_dcl = false;
                 if(!push_label(curr_label, curr_address-1))
                 {
                     err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
