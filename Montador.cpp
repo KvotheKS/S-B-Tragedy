@@ -14,6 +14,7 @@ void read_asm(std::vector<std::vector<std::string>>& tokens, const char* file)
     int i = 0;
     for(eof = std::getline(fd, line).eof();;eof = std::getline(fd, line).eof(), i++)
     {
+        if(line[line.size()-1] == '\r') line.resize(line.size()-1);
         tokenize(tokens, line, sep, spec, spec_tk);
         if(eof) break;
     }    
