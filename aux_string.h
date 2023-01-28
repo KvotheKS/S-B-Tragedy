@@ -78,18 +78,30 @@ void upper_case(std::vector<std::vector<std::string>>& tokens)
 {
     for(auto& line : tokens)
         for(auto& token : line)
+        {
+            if(token[0] == '\'') continue;
+
             for(auto& ch : token)
                 if(ch >= 'a' && ch <= 'z') ch += 'A' - 'a';
+        }
 }
 
 std::string LineLabel(int i)
 { return "Line (" + std::to_string(i+1) + ") : "; }
 
-bool to_num(std::string& number)
+std::pair<int,bool> to_num(std::string& number)
 {
-    short int shr;
+    int shr;
     bool err = false;
-    if(number.size() <= 1 || number[1] != 'X')
+    if(number[0] == '\'')
+    {
+        // std::cout << (int)'\'' << ' ' << (int)number[0] << '\n';
+        if(number.size() != 3 || number[2] != '\'')
+            err = true;
+        else
+            shr = number[1];
+    }
+    else if(number.size() <= 1 || number[1] != 'X')
     {
         try
         { shr = std::stoi(number); }
@@ -101,7 +113,7 @@ bool to_num(std::string& number)
         try{ shr = std::stoi(number, nullptr, 16);}
         catch(...) { err = true;}
     }
-    return err;
+    return {shr, !err};
 }
 
 bool label_valid(std::string& label)

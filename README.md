@@ -5,4 +5,4 @@
 
 ### Como compilar e rodar
     g++ -std=c++17 Montador.cpp -o Montador
-    Montador <-p|-m|-o> <file_name>
+    ./Montador <-p|-m|-o> <file_name>

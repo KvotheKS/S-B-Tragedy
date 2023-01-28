@@ -30,6 +30,7 @@ struct macro_info
 void pre_proccess(std::vector<std::vector<std::string>>& tokens)
 {
     std::map<std::string, std::string> equ;
+    std::set<std::string> label_byte;
     std::string err;
     bool sec_text = false;
     
@@ -62,7 +63,7 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                 }
                 else
                 {
-                    short int flg = std::stoi(it->second);
+                    auto [flg, errflg] = to_num(it->second);
                     int j;
 
                     for(j = i + 1; j < tokens.size(); j++)
@@ -81,7 +82,8 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
             if(line.size() >= 3 && (line[1] == "SPACE" || line[1] == "CONST"))
             {
                 auto it = equ.find(line[2]);
-                
+                if(label_byte.find(line[2]) != label_byte.end())
+                    one_byter.insert(line[0].substr(0,line[0].size()-1));
                 if(it != equ.end())
                     line[2] = it->second;
             }
@@ -111,11 +113,11 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                     continue;
                 }
 
-                auto [t_num, pnum] = get_num(line[2]);
+                auto [t_num, pnum] = to_num(line[2]);
                 
                 if(!pnum)
                 {
-                    err += LineLabel(i) + "Invalid EQU token. Expected number (lexical error)\n";
+                    err += LineLabel(i) + std::to_string(t_num) + "Invalid EQU token. Expected number (lexical error)\n";
                     continue;
                 }
 
@@ -124,7 +126,8 @@ void pre_proccess(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "EQU label already defined (semantic error)\n";
                     continue;
                 }
-                equ.insert({lbl_name, std::to_string((short int)t_num)});
+                if(line[2][0] == '\'') label_byte.insert(lbl_name);
+                equ.insert({lbl_name, std::to_string((int)t_num)});
                 tokens[i].clear();
             }    
         }
@@ -293,7 +296,7 @@ bool push_arg(std::string& err, std::vector<std::string> vstr, int tkline)
             err += LineLabel(tkline) + "Token + expected (syntatic error)\n";
             return false;
         }
-        auto [t_num, b_flag] = get_num(vstr[2]);
+        auto [t_num, b_flag] = to_num(vstr[2]);
         if(!b_flag)
         {
             err += LineLabel(tkline) + "Expected valid number (lexical error)\n";
@@ -359,7 +362,7 @@ void check_labels(std::string& err)
     }
 }
 
-void obj_procces(std::vector<std::vector<std::string>>& tokens)
+void obj_procces(std::vector<std::vector<std::string>>& tokens, int& sctData)
 {
     std::vector<std::string> labels;
     std::string err, curr_label;
@@ -410,7 +413,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 int m_end = 1;
                 if(line.size() == z+2)
                 {
-                    auto [tmp_n, err_flag] = get_num(line[z+1]);
+                    auto [tmp_n, err_flag] = to_num(line[z+1]);
                     if(!err_flag || tmp_n <= 0)
                     {
                         err += LineLabel(i) + "Argument in SPACE has to be a valid base 10|16 number(lexical error)\n";
@@ -428,7 +431,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
                     continue;
                 }
-
+                label_table[curr_label].spaces = m_end;
             }
             else if(line[z] == "CONST") // implementar os enderecos
             {
@@ -437,13 +440,14 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "CONST directive has to be followed by a number (syntatic error)\n";
                     continue;
                 }
-                auto [tmp_n, err_flag] = get_num(line[z+1]);
+                auto [tmp_n, err_flag] = to_num(line[z+1]);
                 
                 if(!err_flag)
                 {
                     err += LineLabel(i) + "Argument in CONST has to be a valid base 10|16 number(lexical error)\n";
                     continue;
                 }
+                if(line[z+1][0] == '\'') one_byter.insert(curr_label);
                 ++j;
                 exec_lines.push_back({tmp_n});
                 curr_address++;
@@ -453,6 +457,10 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                     err += LineLabel(i) + "Label " + curr_label + " was already defined (semantic error)\n";
                     continue;
                 }
+                auto& tbl = label_table[curr_label];
+                tbl.spaces = 1;
+                tbl.is_const = true;
+                tbl.val = tmp_n;
             }
             else
             {
@@ -466,7 +474,10 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
             if(line.size() == 2 && line[0] == "SECTION" )
             {
                 if(line[1] == "DATA")
+                {
+                    sctData = curr_address;
                     sec_data = true;
+                }
                 continue;
             }
 
@@ -496,20 +507,21 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
             if(line.size() == z) continue;
             if(instructions.find(line[z]) == instructions.end())
             {
+                std::cout << line[z] << '\n';
                 err += LineLabel(i) + " First token in line (disconsidering optiona label) has to be an instruction (syntatic error)\n";
                 continue;
             }
             
             exec_lines.push_back({instructions[line[z]]});
             
-            if(line[z] == "COPY")
+            if(line[z] == "COPY" || line[z] == "INPUT_S" || line[z] == "OUTPUT_S")
             {
                 int l = z + 1, r = -1;
                 // bool b_flag = false;
                 for(l = z + 1; line.size() > l && (r = line[l].find(',')) == std::string::npos; l++);
                 if(l == line.size() || r == line[l].size()-1)
                 {
-                    err += LineLabel(i) + "COPY instruction has 2 arguments separated only by a comma (syntatic error)\n";
+                    err += LineLabel(i) + "COPY/INPUT_S/OUTPUT_S instructions have 2 arguments separated only by a comma (syntatic error)\n";
                     continue;
                 }
         
@@ -517,8 +529,21 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
                 line.erase(line.begin() + l);
                
                 if(!push_arg(err, std::vector<std::string>(line.begin() + z + 1, line.begin() + l + 1),i)) continue;
-                if(!push_arg(err, std::vector<std::string>(line.begin() + l + 1, line.end()),i)) continue;
-                
+                if(line[z] == "COPY")
+                {
+                    if(!push_arg(err, std::vector<std::string>(line.begin() + l + 1, line.end()),i)) 
+                        continue;
+                }
+                else
+                {
+                    auto [t_num, pnum] = to_num(*(line.begin() + l + 1));
+                    if(!pnum || t_num<0)
+                    {
+                        err += LineLabel(i) + "INPUT_S/OUTPUT_S second argument is a positive number (syntatic error)\n";
+                        continue;
+                    }
+                    exec_lines[exec_lines.size()-1].push_back(t_num);
+                }
                 curr_address += 3;
             }
             else if(line[z] == "STOP")
@@ -555,6 +580,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens)
             else if(line[1] == "DATA")
             {
                 sec_data = true;
+                sctData = curr_address;
                 if(!sec_text)
                 {
                     err += LineLabel(i) + "SECTION DATA declared before SECTION TEXT (semantic error)\n";
@@ -706,41 +732,173 @@ void push_obj(std::string fname)
     fout.close();
 }
 
+int label_add_num(std::map<int, std::string>& label_ins, int nmbr)
+{
+    int plus = 0;
+    for(std::map<int,std::string>::iterator it = label_ins.begin(), jt = std::next(it);; it++, jt++)
+    {
+        if(it->first == nmbr)
+        {
+            plus = 0; break;
+        }
+        else if(jt == label_ins.end() || (it->first < nmbr && nmbr < jt->first))
+        {
+            plus = nmbr - it->first; break;
+        }   
+    }
+    return plus;
+}
+
+void traduct(std::string file_n, int sctData)
+{
+    int end = 0;
+    std::ofstream fout(file_n);
+
+    std::map<int, std::string> label_ins;
+    int plus, plus1, plus2;
+    for(auto& it : label_table)
+        label_ins.insert({it.second.end, it.first});
+    {
+        std::ifstream fin("functions.asm");
+        char buff[512];
+        while(!fin.eof())
+        {
+            fin.getline(buff,511);
+            fout << buff << '\n';
+        }
+        fin.close();
+    }
+    for(auto it : one_byter)
+        std::cout << it;
+    std::cout << '\n';
+    fout << "\nsection .text\nglobal _start\n_start:\n";
+    for(int i = 0; end < sctData; i++)
+    {
+        std::string line;
+        std::string reg = "eax";
+        auto it = label_ins.find(end);
+        if(it != label_ins.end())
+            line += it->second + ": ";
+        
+        switch(exec_lines[i][0])
+        {
+            case 1 ... 4:
+                plus = label_add_num(label_ins, exec_lines[i][1]);
+                if(exec_lines[i][0] >= 3)
+                    line += "cdq\n";
+                line += instructions_32[exec_lines[i][0]];
+                if(one_byter.find(label_ins[exec_lines[i][1] - plus]) != one_byter.end())
+                    reg = "al";
+                
+                if(exec_lines[i][0] < 3)
+                    line += " " + reg + ",";
+                if(reg[0] == 'e')
+                    line += " dword ";
+                line += " [" + label_ins[exec_lines[i][1] - plus];
+               
+                if(plus != 0)
+                    line += " + " + std::to_string(plus);
+                line += "]\n";
+            break;
+
+            case 5 ... 8:
+                if(exec_lines[i][0] != 5)
+                    line += "cmp eax, 0\n";
+                line += instructions_32[exec_lines[i][0]] + ' ' + label_ins[exec_lines[i][1]] + '\n';
+            break;
+
+            case 9:
+                plus1 = label_add_num(label_ins, exec_lines[i][1]);
+                plus2 = label_add_num(label_ins, exec_lines[i][2]);
+                reg = "ebx";
+                if(one_byter.find(label_ins[exec_lines[i][1] - plus]) != one_byter.end())
+                    reg = "bl";
+                line += "mov " + reg + ",";
+                
+                line += "[" + label_ins[exec_lines[i][1] - plus1];
+                if(plus1 != 0)
+                    line += " + " + std::to_string(plus1);
+                line += "]\n";
+                line += "mov [" + label_ins[exec_lines[i][2] - plus2];
+                if(plus2 != 0)
+                    line += " + " + std::to_string(plus2);
+                line += "], " + reg + '\n';
+            break;
+
+            case 10:
+                plus = label_add_num(label_ins, exec_lines[i][1]);
+                if(one_byter.find(label_ins[exec_lines[i][1] - plus]) != one_byter.end())
+                    reg = "al";
+                line += "mov " + reg + ", [" + label_ins[exec_lines[i][1] - plus];
+                if(plus != 0)
+                    line += " + " + std::to_string(plus);
+                line += "]\n";
+            break;
+
+            case 11:
+                plus = label_add_num(label_ins, exec_lines[i][1]);
+                if(one_byter.find(label_ins[exec_lines[i][1] - plus]) != one_byter.end())
+                    reg = "al";
+                line += "mov [" + label_ins[exec_lines[i][1] - plus];
+                if(plus != 0)
+                    line += " + " + std::to_string(plus);
+                line += "], " + reg + '\n';
+            break;
+
+            case 14: // stop
+                line += "mov eax, 1\nmov ebx, 0\nint 80h\n";
+            break;
+
+            case 12 ... 13: case 15 ... 18: // input_c
+                plus = label_add_num(label_ins, exec_lines[i][1]);
+                line += "push " + label_ins[exec_lines[i][1] - plus];
+                if(plus != 0)
+                    line += " + " + std::to_string(plus);
+                line += '\n';
+                if(exec_lines[i][0] == 17 || exec_lines[i][0] == 19)
+                    line += "push dword " + std::to_string(exec_lines[i][2]) + '\n';
+                line += "call " + instructions_32[exec_lines[i][0]] + '\n';
+            break;
+        }
+        fout << line;
+        end += exec_lines[i].size();
+    }
+    fout << "\nsection .data\n";
+    for(auto& it : label_table)
+        if(it.second.spaces != 0 && it.second.is_const)
+        {
+            fout << it.first;
+            if(one_byter.find(it.first) != one_byter.end())
+                fout << " db "; 
+            else
+                fout << " dd ";
+            fout << std::to_string(it.second.val) << '\n';
+        }
+    fout << "\nsection .bss\n";
+    for(auto& it : label_table)
+        if(it.second.spaces != 0 && !it.second.is_const)
+            fout << it.first << " resd " << std::to_string(it.second.spaces) << '\n';
+        
+    fout.close();
+}
+
 int main(int argc, char **argv)
 {
     std::vector<std::vector<std::string>> tokens;
     std::map<std::string, macro_info> macros;
-    
-    std::string op = argv[1];
-    std::string file_n = argv[2];
-    // std::string ext = get_ext(file_n);
-    std::string ext;
-    if(op == "-p") ext = ".ASM";
-    else if(op == "-m") ext = ".PRE";
-    else if(op == "-o") ext = ".MCR";
-    else return 0;
+    int sctData = -1;
+    std::string file_n = argv[1];
 
-    read_asm(tokens, (file_n + ext).c_str());
+    read_asm(tokens, (file_n + ".ASM").c_str());
     upper_case(tokens);
+    pre_proccess(tokens);
     
-    if(op == "-p")
-    {
-        pre_proccess(tokens);
-        pre_proccess_file(tokens, file_n + ".PRE");
-        return 0;
-    }
+    pre_proccess_file(tokens, file_n + ".PRE");
 
-    if(op == "-m")
-    {
-        macro_processing(tokens, macros);
-        macro_process_tokens(tokens, macros);
-        pre_proccess_file(tokens, file_n + ".MCR");
-        return 0;
-    }
-    
-    if(op == "-o")
-    {
-        obj_procces(tokens);
-        push_obj(file_n);
-    }
+    macro_processing(tokens, macros);
+    macro_process_tokens(tokens, macros);
+    pre_proccess_file(tokens, file_n + ".MCR");
+
+    obj_procces(tokens,sctData);
+    traduct(file_n + ".S", sctData);
 }
