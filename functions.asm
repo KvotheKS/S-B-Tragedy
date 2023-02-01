@@ -31,32 +31,42 @@ section .text
     mov edx, %2
     int 80h
 
-    mov eax, %1
-    mov ebx, %2
+    ;mov eax, %1
+    ;mov ebx, %2
+    push dword %1
+    push dword %2
     call wr_trunk
 %endmacro
 
-wr_trunk:
-    mov esi, 0
-
+wr_trunk: ; recebe 2 variaveis locais (char*,int)
+    enter 4, 0
+    mov [ebp-4], 0
+    mov eax, [ebp+12]
+    mov ebx, [ebp+8]
+    
 wr_trunk_inic:
-    cmp esi, ebx
+    cmp [ebp-4], ebx
     jae wr_trunk_final
-
+    
+    add eax, [ebp-4]
     cmp byte [eax + esi], 0ah
     jz wr_trunk_chng
-
-    inc esi
+    sub eax, [ebp-4]
+    inc [ebp-4]
     jmp wr_trunk_inic
 
 wr_trunk_chng:
-    mov byte [eax + esi], 0
+    add eax, [ebp-4]
+    mov byte [eax], 0
 
 wr_trunk_final:
-    mov eax, esi
+    mov eax, [ebp-4]
+    leave
+    
     ret
 
-to_num:
+to_num: ; void to_num(int*) recebe o int* na stack
+    enter 0, 0
     push eax
     mov eax, 0
     mov ebx, 0
@@ -95,6 +105,7 @@ to_num_out:
     pop ebx
     mov [ebx], eax
     
+    leave
     ret
 
 to_string: 
@@ -176,7 +187,7 @@ input:
 
     push eax; quantidade de bytes lida
 
-    mov eax, ecx
+    push ecx
     call to_num
 
     mov eax, [esp]
