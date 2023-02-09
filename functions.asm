@@ -18,10 +18,6 @@
         mov ecx, %1
         mov edx, %2
         int 80h
-
-        push dword %1
-        push dword %2
-        call wr_trunk
     %endmacro
 
     %macro __out 2
@@ -30,34 +26,7 @@
         mov ecx, %1
         mov edx, %2
         int 80h
-
-        push dword %1
-        push dword %2
-        call wr_trunk
     %endmacro
-
-    wr_trunk: ;int wr_trunk(char*,int) recebe 2 argumentos e retorna a qtd de bytes antes do 0ah
-        enter 0, 0
-        mov eax, 0
-        mov ebx, [ebp+8]
-        mov ecx, [ebp+12]
-
-    wr_trunk_inic:
-        cmp eax, ebx
-        jae wr_trunk_final
-
-        cmp byte [eax + ecx], 0ah
-        jz wr_trunk_chng
-
-        inc eax
-        jmp wr_trunk_inic
-
-    wr_trunk_chng:
-        mov byte [eax + ecx], 0
-
-    wr_trunk_final:
-        leave
-        ret 8
 
     to_num: ; void to_num(int*) recebe 1 argumento pela stack.
         enter 4, 0
@@ -66,7 +35,7 @@
         mov ebx, 0
         mov [ebp-4], dword 1
 
-        cmp byte [__numberstring + ebx], 0
+        cmp byte [__numberstring + ebx], 0ah
         jz to_num_out
 
         cmp byte [__numberstring + ebx], '-'
@@ -75,7 +44,7 @@
         mov dword [ebp-4], -1
 
     to_num_in:
-        cmp byte [__numberstring + ebx], 0
+        cmp byte [__numberstring + ebx], 0ah
         jz to_num_out
         mov edx, __numberstring
         add edx, ebx
