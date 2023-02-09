@@ -272,33 +272,17 @@
 section .text
 global _start
 _start:
-push OLD_DATA
-call input
-mov eax, [OLD_DATA]
-L1: cdq
-idiv dword  [DOIS]
-mov [NEW_DATA], eax
-cdq
-imul dword  [DOIS]
-mov [TMP_DATA], eax
-mov eax, [OLD_DATA]
-sub eax, dword  [TMP_DATA]
-mov [TMP_DATA], eax
-push TMP_DATA
-call output
-mov ebx,[NEW_DATA]
-mov [OLD_DATA], ebx
-mov eax, [OLD_DATA]
-cmp eax, 0
-ja L1
+push DOIS
+push dword 2
+call output_s
 mov eax, 1
 mov ebx, 0
 int 80h
 
 section .data
-DOIS dd 2
+DOIS db 97
+OLD_DATA db 98
+NEW_DATA db 99
 
 section .bss
-NEW_DATA resd 1
-OLD_DATA resd 1
 TMP_DATA resd 1

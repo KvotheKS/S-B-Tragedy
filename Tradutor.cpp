@@ -447,7 +447,7 @@ void obj_procces(std::vector<std::vector<std::string>>& tokens, int& sctData)
                     err += LineLabel(i) + "Argument in CONST has to be a valid base 10|16 number(lexical error)\n";
                     continue;
                 }
-                if(line[z+1][0] == '\'') one_byter.insert(curr_label);
+                if(line[z+1][0] == '\'') one_byter.insert(curr_label.substr(0,curr_label.size()-1));
                 ++j;
                 exec_lines.push_back({tmp_n});
                 curr_address++;
@@ -758,6 +758,7 @@ void traduct(std::string file_n, int sctData)
     int plus, plus1, plus2;
     for(auto& it : label_table)
         label_ins.insert({it.second.end, it.first});
+
     {
         std::ifstream fin("functions.asm");
         char buff[512];
@@ -768,9 +769,7 @@ void traduct(std::string file_n, int sctData)
         }
         fin.close();
     }
-    for(auto it : one_byter)
-        std::cout << it;
-    std::cout << '\n';
+
     fout << "\nsection .text\nglobal _start\n_start:\n";
     for(int i = 0; end < sctData; i++)
     {
@@ -864,21 +863,26 @@ void traduct(std::string file_n, int sctData)
         end += exec_lines[i].size();
     }
     fout << "\nsection .data\n";
-    for(auto& it : label_table)
-        if(it.second.spaces != 0 && it.second.is_const)
+    for(auto& it : label_ins)
+    {
+        auto jt = *label_table.find(it.second);
+        if(jt.second.spaces != 0 && jt.second.is_const)
         {
-            fout << it.first;
-            if(one_byter.find(it.first) != one_byter.end())
+            fout << jt.first;
+            if(one_byter.find(jt.first) != one_byter.end())
                 fout << " db "; 
             else
                 fout << " dd ";
-            fout << std::to_string(it.second.val) << '\n';
+            fout << std::to_string(jt.second.val) << '\n';
         }
+    }
     fout << "\nsection .bss\n";
-    for(auto& it : label_table)
-        if(it.second.spaces != 0 && !it.second.is_const)
-            fout << it.first << " resd " << std::to_string(it.second.spaces) << '\n';
-        
+    for(auto& it : label_ins)
+    {
+        auto jt = *label_table.find(it.second);
+        if(jt.second.spaces != 0 && !jt.second.is_const)
+            fout << jt.first << " resd " << std::to_string(jt.second.spaces) << '\n';
+    }  
     fout.close();
 }
 
