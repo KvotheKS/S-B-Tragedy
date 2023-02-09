@@ -69,12 +69,20 @@
         ret 4
 
     to_string: ; int to_string(int) retorna o tamanho do inteiro em bytes.
-        enter 0,0
+        enter 4,0
         mov esi, 0
         mov eax, [ebp + 8]
+        mov dword [ebp-4], 0
+        cmp eax, 0
+        jge to_string_inic
+
+        neg eax
+        mov dword [ebp-4], 1
+        mov byte [__numbersize + esi], '-'
+        inc esi
 
     to_string_inic:
-        cdq
+        xor edx, edx
         mov ecx, 10
         div ecx
         
@@ -90,7 +98,7 @@
         mov byte [__numbersize + esi], 0
         
         dec esi
-        mov eax, 0
+        mov eax, [ebp-4]
     to_string_rev:
         cmp eax, esi
         jae to_string_rev_f
